@@ -11,10 +11,10 @@
 
 ## 対象シール
 
-| クラス | 色 | 形状 |
-|--------|-----|------|
-| blue_triangle | 青 | 三角形 |
-| yellow_octagon | 黄色 | 八角形 |
+| クラス | 色 | 形状 | 用途 |
+|--------|-----|------|------|
+| blue_triangle | 青 | 三角形 | 冷蔵（2〜10℃） |
+| yellow_octagon | 黄色 | 八角形 | 冷凍（-18℃以下） |
 
 ## 検出方式
 
@@ -23,8 +23,13 @@
 色と形状が明確なシールに最適。すぐに使用可能。
 
 ```
-入力 → HSV変換 → 色マスク → 輪郭検出 → 頂点数で分類
+入力 → HSV変換 → 色マスク → 輪郭検出 → 凸包処理 → 頂点数で分類
 ```
+
+**特徴:**
+- 学習不要ですぐに使える
+- 凸包（Convex Hull）処理で内部の白い領域を無視
+- 近接領域の自動マージ機能
 
 ### 方式2: YOLOX（深層学習）
 
@@ -34,11 +39,12 @@
 ## ディレクトリ構成
 
 ```
-yolox-docker/
+seal-detection/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
 ├── README.md
+├── cvat/                       # 既存のcvatクローン（マウント）
 ├── YOLOX/                      # 既存のYOLOXクローン（マウント）
 ├── scripts/
 │   ├── # HSV色検出（学習不要）
@@ -65,8 +71,6 @@ yolox-docker/
 ### 1. 環境構築
 
 ```bash
-cd yolox-docker
-
 # YOLOXをクローン（まだの場合）
 git clone https://github.com/Megvii-BaseDetection/YOLOX.git
 
@@ -97,6 +101,7 @@ python detect_video.py \
 # 画像から検出
 python detect_video.py \
     -i /workspace/videos/frame.jpg \
+    -o /workspace/videos/result.jpg \
     --vertices \
     --show
 ```
@@ -124,21 +129,35 @@ python calibrate_hsv.py -i /workspace/videos/sample.jpg
 `detector_config.yaml` を編集：
 
 ```yaml
+# 青い三角形シール（冷蔵）
 blue:
-  hsv_lower: [100, 100, 100]
+  hsv_lower: [95, 100, 100]
   hsv_upper: [130, 255, 255]
-  expected_vertices: 3
-  vertex_tolerance: 1
+  expected_vertices: 4      # 凸包処理後の頂点数
+  vertex_tolerance: 3
+  class_name: blue_triangle
 
+# 黄色い八角形シール（冷凍）
 yellow:
   hsv_lower: [20, 100, 100]
-  hsv_upper: [35, 255, 255]
-  expected_vertices: 8
-  vertex_tolerance: 2
+  hsv_upper: [45, 255, 255]
+  expected_vertices: 6      # 凸包処理後の頂点数
+  vertex_tolerance: 4
+  class_name: yellow_octagon
 
+# 検出パラメータ
 detection:
-  min_area: 500
-  max_area: 100000
+  min_area: 5000            # 最小面積
+  max_area: 500000          # 最大面積
+  epsilon_ratio: 0.03       # 輪郭近似精度
+  morph_kernel_size: 7      # モルフォロジーカーネル
+  blur_kernel_size: 5       # ブラーカーネル
+  
+  # 白い領域対策（シール内の品名欄・バーコード対応）
+  use_convex_hull: true     # 凸包を使用
+  fill_holes: true          # 内部の穴を埋める
+  morph_iterations: 2       # モルフォロジー反復回数
+  dilate_iterations: 5      # 膨張処理反復回数
 ```
 
 ---
@@ -230,6 +249,15 @@ docker-compose build --no-cache   # 再ビルド
 1. `calibrate_hsv.py` でHSV範囲を確認
 2. `min_area` を小さくする
 3. S, V範囲を広げる
+
+### シールが複数に分割されて検出される
+1. `dilate_iterations` を増やす（輪郭を繋げる）
+2. `morph_iterations` を増やす
+
+### 誤検出が多い
+1. `min_area` を大きくする
+2. HSV範囲を狭める
+3. `vertex_tolerance` を小さくする
 
 ### YOLOX学習が進まない
 - データセットのアノテーション数を確認（各クラス50枚以上推奨）
