@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  yolox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: yolox-seal-detection:latest
+    container_name: yolox
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    ports:
+      - "8888:8888"  # Jupyter Notebook
+    volumes:
+      # YOLOX本体（既存のクローンをマウント）
+      - ./YOLOX:/workspace/YOLOX
+      # スクリプト
+      - ./scripts:/workspace/scripts
+      # 実験設定（YOLOX用）
+      - ./exps:/workspace/exps/custom
+      # データセット（YOLOX用）
+      - ./dataset:/workspace/dataset
+      # 学習済みモデル出力（YOLOX用）
+      - ./outputs:/workspace/outputs
+      # 事前学習済み重み（YOLOX用）
+      - ./weights:/workspace/weights
+      # 入力動画
+      - ./videos:/workspace/videos
+      # Jupyterノートブック
+      - ./notebooks:/workspace/notebooks
+    working_dir: /workspace/YOLOX
+    stdin_open: true
+    tty: true
+    command: >
+      bash -c "
+        if [ ! -f /workspace/.yolox_installed ]; then
+          echo 'Installing YOLOX...' &&
+          cd /workspace/YOLOX &&
+          pip install -v -e . &&
+          touch /workspace/.yolox_installed;
+        fi &&
+        exec bash
+      "
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

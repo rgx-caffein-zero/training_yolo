@@ -1,0 +1,50 @@
+# Videos
+videos/*.mp4
+videos/*.avi
+videos/*.mov
+videos/*.jpg
+videos/*.png
+
+# Dataset (YOLOX)
+dataset/train/
+dataset/val/
+dataset/raw_images/
+dataset/annotations/*.json
+
+# Weights (YOLOX)
+weights/*.pth
+weights/*.pt
+
+# Outputs (YOLOX)
+outputs/
+
+# Jupyter
+notebooks/.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+tensorboard/
+
+# YOLOX (mounted)
+YOLOX/
