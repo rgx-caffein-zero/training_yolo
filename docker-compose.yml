@@ -38,7 +38,7 @@ services:
         if [ ! -f /workspace/.yolox_installed ]; then
           echo 'Installing YOLOX...' &&
           cd /workspace/YOLOX &&
-          pip install -v -e . &&
+          pip install -v --no-build-isolation --no-deps -e . &&
           touch /workspace/.yolox_installed;
         fi &&
         exec bash
