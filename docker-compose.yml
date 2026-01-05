@@ -30,7 +30,7 @@ services:
       - ./videos:/workspace/videos
       # Jupyterノートブック
       - ./notebooks:/workspace/notebooks
-    working_dir: /workspace/YOLOX
+    working_dir: /workspace
     stdin_open: true
     tty: true
     command: >
