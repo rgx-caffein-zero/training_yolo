@@ -36,6 +36,10 @@
 環境変化が激しい場合や、より高精度が必要な場合に使用。
 学習データの準備が必要。
 
+**特徴:**
+- COCO事前学習モデル（80クラス）での汎用検出にも対応
+- カスタム学習でシール専用モデルを作成可能
+
 ## ディレクトリ構成
 
 ```
@@ -49,21 +53,25 @@ seal-detection/
 ├── scripts/
 │   ├── # HSV色検出（学習不要）
 │   ├── color_shape_detector.py # 検出クラス
-│   ├── detect_video.py         # 動画/画像検出
-│   ├── calibrate_hsv.py        # HSVパラメータ調整
+│   ├── detect_video.py         # 動画/画像検出（CLI）
+│   ├── calibrate_hsv.py        # HSVパラメータ調整（GUI必要）
 │   ├── detector_config.yaml    # 検出設定
 │   │
 │   ├── # YOLOX（深層学習）
 │   ├── yolox_train.sh          # 学習スクリプト
-│   ├── yolox_inference.py      # 推論スクリプト
-│   └── yolox_prepare_dataset.py # データセット準備
+│   ├── yolox_inference.py      # 推論スクリプト（COCO対応）
+│   ├── yolox_prepare_dataset.py # データセット準備
+│   ├── coco_classes.txt        # COCOクラス名（80クラス）
+│   └── seal_classes.txt        # シールクラス名（2クラス）
+├── notebooks/                  # Jupyter Notebook
+│   ├── hsv_calibration.ipynb   # HSVキャリブレーション（GUI不要）
+│   └── detection_test.ipynb    # 検出テスト・可視化
 ├── exps/                       # YOLOX実験設定
 │   └── seal_detection_exp.py
 ├── dataset/                    # YOLOX学習データ
 ├── weights/                    # YOLOX事前学習済み重み
 ├── outputs/                    # YOLOX学習出力
-├── videos/                     # 入力/出力動画
-└── notebooks/                  # Jupyterノートブック
+└── videos/                     # 入力/出力動画
 ```
 
 ## クイックスタート
@@ -80,14 +88,27 @@ bash setup.sh
 # ビルド・起動
 docker-compose build
 docker-compose up -d
+
+# ログを確認（YOLOXインストール完了を待つ）
+docker logs -f yolox
+
+# コンテナに入る
 docker-compose exec yolox bash
+```
+
+### 2. 事前学習済み重みのダウンロード（YOLOX使用時）
+
+```bash
+# コンテナ内で実行
+wget -P /workspace/weights \
+    https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.pth
 ```
 
 ---
 
 ## 方式1: HSV色検出（学習不要）
 
-### 基本的な使い方
+### CLI版（GUI環境が必要）
 
 ```bash
 cd /workspace/scripts
@@ -102,27 +123,38 @@ python detect_video.py \
 python detect_video.py \
     -i /workspace/videos/frame.jpg \
     -o /workspace/videos/result.jpg \
-    --vertices \
-    --show
+    --vertices
 ```
 
-### HSVパラメータ調整
+### Jupyter Notebook版（GUI不要・推奨）
 
-実際のシールの色に合わせてパラメータを調整：
+WSL2などGUI環境がない場合はJupyter Notebookを使用します。
 
 ```bash
-python calibrate_hsv.py -i /workspace/videos/sample.jpg
+# コンテナ内でJupyterを起動
+jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+
+# ブラウザでアクセス: http://localhost:8888
 ```
 
-**操作方法：**
-| キー | 動作 |
-|------|------|
-| q | 終了 |
-| p | 現在の値を表示 |
-| s | 設定をファイルに保存 |
-| b | 青のプリセット |
-| y | 黄のプリセット |
-| r | リセット |
+#### 提供ノートブック
+
+| ノートブック | 用途 |
+|-------------|------|
+| `hsv_calibration.ipynb` | HSVパラメータの調整（インタラクティブスライダー） |
+| `detection_test.ipynb` | 検出テスト・動画処理・バッチ処理 |
+
+**hsv_calibration.ipynb の機能:**
+- インタラクティブなスライダーでH/S/V値を調整
+- リアルタイムでマスクと検出結果をプレビュー
+- プリセットボタン（Blue/Yellow/Reset）
+- 設定をYAMLファイルに保存
+
+**detection_test.ipynb の機能:**
+- 画像/動画からの検出テスト
+- 検出結果の可視化（マスク表示付き）
+- 動画フレームのインタラクティブ探索（スライダー）
+- バッチ処理・出力生成
 
 ### 設定ファイル
 
@@ -164,7 +196,70 @@ detection:
 
 ## 方式2: YOLOX（深層学習）
 
-### データセット準備
+### 推論（事前学習済みモデル）
+
+学習なしで、COCO事前学習済みモデル（80クラス）を使って推論できます。
+
+```bash
+cd /workspace/scripts
+
+# COCO 80クラスで検出
+python yolox_inference.py \
+    -c /workspace/weights/yolox_s.pth \
+    -m yolox_s \
+    -i /workspace/videos/input.mp4 \
+    -o /workspace/videos/output.mp4
+
+# 画像から検出
+python yolox_inference.py \
+    -c /workspace/weights/yolox_s.pth \
+    -m yolox_s \
+    -i /workspace/videos/sample.jpg \
+    -o /workspace/videos/result.jpg
+
+# 特定クラスのみ検出（フィルタ機能）
+python yolox_inference.py \
+    -c /workspace/weights/yolox_s.pth \
+    -m yolox_s \
+    -i /workspace/videos/input.mp4 \
+    -o /workspace/videos/output.mp4 \
+    --filter person,car,truck
+
+# COCOクラス一覧を表示
+python yolox_inference.py --list-classes
+```
+
+#### 推論オプション
+
+| オプション | 説明 | デフォルト |
+|-----------|------|----------|
+| `-c, --ckpt` | チェックポイントファイル | 必須 |
+| `-m, --model` | YOLOXモデル名 | - |
+| `-e, --exp` | 実験設定ファイル（カスタムモデル用） | - |
+| `-i, --input` | 入力ファイル（動画/画像） | 必須 |
+| `-o, --output` | 出力ファイル | - |
+| `--conf` | 信頼度閾値 | 0.5 |
+| `--nms` | NMS閾値 | 0.45 |
+| `--size` | 入力サイズ | 640 |
+| `--filter` | 検出クラスをフィルタ（カンマ区切り） | - |
+| `--num-classes` | クラス数 | 80 |
+| `--class-names` | クラス名ファイル | - |
+| `--list-classes` | COCOクラス一覧を表示 | - |
+
+#### 対応モデル
+
+| モデル名 | パラメータ数 | 特徴 |
+|---------|------------|------|
+| `yolox_nano` | 0.91M | 最速・軽量 |
+| `yolox_tiny` | 5.06M | 高速 |
+| `yolox_s` | 9.0M | バランス（推奨） |
+| `yolox_m` | 25.3M | 高精度 |
+| `yolox_l` | 54.2M | 高精度 |
+| `yolox_x` | 99.1M | 最高精度 |
+
+### カスタム学習（シール検出専用モデル）
+
+#### データセット準備
 
 ```bash
 cd /workspace/scripts
@@ -186,14 +281,10 @@ python yolox_prepare_dataset.py split \
 python yolox_prepare_dataset.py verify -d /workspace/dataset
 ```
 
-### 学習
+#### 学習
 
 ```bash
 cd /workspace/YOLOX
-
-# 事前学習済み重みダウンロード
-wget -P /workspace/weights \
-    https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.pth
 
 # 学習実行
 bash /workspace/scripts/yolox_train.sh
@@ -202,14 +293,14 @@ bash /workspace/scripts/yolox_train.sh
 bash /workspace/scripts/yolox_train.sh -b 32 --fp16
 ```
 
-### 推論
+#### 推論（カスタムモデル）
 
 ```bash
 python /workspace/scripts/yolox_inference.py \
     -c /workspace/outputs/seal_detection/best_ckpt.pth \
-    -v /workspace/videos/test.mp4 \
-    -o /workspace/videos/output.mp4 \
-    --show
+    -e /workspace/exps/custom/seal_detection_exp.py \
+    -i /workspace/videos/test.mp4 \
+    -o /workspace/videos/output.mp4
 ```
 
 ---
@@ -223,14 +314,35 @@ jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
 # ブラウザでアクセス: http://localhost:8888
 ```
 
+| ノートブック | 説明 |
+|-------------|------|
+| `hsv_calibration.ipynb` | HSVパラメータ調整（GUI不要） |
+| `detection_test.ipynb` | 検出テスト・動画処理 |
+
+---
+
 ## よく使うコマンド
 
 ```bash
-docker-compose exec yolox bash    # コンテナに入る
-docker-compose logs -f            # ログ確認
-docker-compose down               # 停止
-docker-compose build --no-cache   # 再ビルド
+# コンテナに入る
+docker-compose exec yolox bash
+
+# ログ確認
+docker logs -f yolox
+
+# 停止
+docker-compose down
+
+# 再ビルド（キャッシュなし）
+docker-compose build --no-cache
+
+# YOLOXの再インストール（問題発生時）
+docker-compose down -v
+rm -f .yolox_installed
+docker-compose up -d
 ```
+
+---
 
 ## どちらを使うべきか？
 
@@ -241,28 +353,57 @@ docker-compose build --no-cache   # 再ビルド
 | 照明条件が安定 | HSV色検出 |
 | 環境変化が激しい | YOLOX |
 | より高精度が必要 | YOLOX |
-| 学習データを用意できる | YOLOX |
+| 汎用物体検出（人、車など） | YOLOX（COCO） |
+
+---
 
 ## トラブルシューティング
 
-### HSV検出で検出されない
-1. `calibrate_hsv.py` でHSV範囲を確認
-2. `min_area` を小さくする
-3. S, V範囲を広げる
+### Docker関連
 
-### シールが複数に分割されて検出される
-1. `dilate_iterations` を増やす（輪郭を繋げる）
-2. `morph_iterations` を増やす
+#### `onnx-simplifier` インストールエラー
+```
+packaging.version.InvalidVersion: Invalid version: 'unknown'
+```
 
-### 誤検出が多い
+**解決:** `docker-compose.yml` が最新版か確認。YOLOXの `setup.py` を自動修正する処理が含まれています。
+
+```bash
+# 完全にリセットして再起動
+docker-compose down -v
+docker-compose up -d
+docker logs -f yolox
+```
+
+### HSV検出関連
+
+#### 検出されない
+1. `hsv_calibration.ipynb` でHSV範囲を確認
+2. `min_area` を小さくする（例: 5000 → 1000）
+3. S, V範囲を広げる（min値を下げる）
+
+#### シールが複数に分割されて検出される
+1. `dilate_iterations` を増やす（例: 5 → 8）
+2. `morph_iterations` を増やす（例: 2 → 3）
+
+#### 誤検出が多い
 1. `min_area` を大きくする
 2. HSV範囲を狭める
 3. `vertex_tolerance` を小さくする
 
-### YOLOX学習が進まない
+### YOLOX関連
+
+#### 学習が進まない
 - データセットのアノテーション数を確認（各クラス50枚以上推奨）
-- バッチサイズを下げる
+- バッチサイズを下げる（`-b 8`）
+
+#### 推論でクラス名が `class_0` などになる
+- `--class-names` でクラス名ファイルを指定
+- `--num-classes` でクラス数を正しく指定
+
+---
 
 ## ライセンス
 
-YOLOX: Apache License 2.0
+- YOLOX: Apache License 2.0
+- このプロジェクト: MIT License
