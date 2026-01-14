@@ -33,6 +33,7 @@ services:
     working_dir: /workspace
     stdin_open: true
     tty: true
+    shm_size: '2gb'
     command: >
       bash -c "
         if [ ! -f /workspace/.yolox_installed ]; then
